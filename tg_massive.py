@@ -1,6 +1,6 @@
 import subprocess, sys, time, os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
 
 TBOT = os.getenv('tbot')
 

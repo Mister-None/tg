@@ -9,18 +9,18 @@ from telethon.tl.functions.account import UpdateProfileRequest, UpdateUsernameRe
 from telethon.tl.functions.channels import JoinChannelRequest, GetFullChannelRequest
 from telethon.tl.functions.messages import ExportChatInviteRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest
+from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import Channel, Chat, User, DialogFilter, InputMessagesFilterPhotos, DocumentAttributeVideo, InputMessagesFilterVideo, InputMessagesFilterDocument
-
-import sys, asyncio, pandas as pd, re, random as r, sqlite3, numpy as np, os, imagehash, warnings
+import sys, asyncio, pandas as pd, re, random as r, sqlite3, numpy as np, os, imagehash, warnings, requests
 
 warnings.filterwarnings("ignore", category=UserWarning)
-load_dotenv()
+
+load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
 init(autoreset=True)
 
 APP_ID = os.getenv('app_id')
 APP_TOKEN = os.getenv('app_token')
 CHATS_GROUPS = os.getenv('chats_groups')
-DS = os.getenv('ds')
 FORWARD_LOG = os.getenv('forward_log')
 PASSWORD = os.getenv('password')
 RECIPIENTS = os.getenv('recipients')
@@ -29,12 +29,14 @@ SEARCH_CHANNELS = os.getenv('search_channels')
 SESSIONS = os.getenv('sessions')
 TG = os.getenv('tg')
 TG_DATA = os.getenv('tg_data')
-
+MAX_CHANNEL = int(os.getenv('max_channel'))
+SECRET_CHANNEL = int(os.getenv('secret_channel'))
+TG_DEADS_DATA = os.getenv('tg_deads_data')
 con = sqlite3.connect(TG_DATA)
 cur = con.cursor()
 
 if len(sys.argv) < 3:
-    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'sophia', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document']
+    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'sophia', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog']
 
     print(Fore.RED + 'Enter number of function and number of bot!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
@@ -70,7 +72,51 @@ async def main():
     me = await client.get_me() 
     print (f'Phone >>> {me.phone}\n{me.first_name} {me.last_name}\t{me.id}\t{me.username}\nHave {len(media_id)} attachments!')
 
-    if entry == 23: #I don't know))
+    if entry == 26: #get dialog info and get data about participants
+        column_names = ['id', 'message', 'date'] 
+        raw_dict = {i:[] for i in column_names}
+        async for message in client.iter_messages(SECRET_CHANNEL):
+            try:
+                if message.from_id.user_id:
+                    print(message.id)
+                    raw_dict['id'].append(message.from_id.user_id)
+                    raw_dict['message'].append(message.message)
+                    raw_dict['date'].append(str(message.date))
+            except AttributeError: pass
+        pd.DataFrame(raw_dict).to_excel('data.xlsx', index=False)
+        input('> ')
+        df = pd.read_excel('data.xlsx', sheet_name='Sheet1')
+        ids = list({i for i in df['id']})
+        ids.sort()
+        new_dict = {i:[] for i in ['id', 'username', 'full name', 'phone', 'message', 'date']}
+        for i in ids:
+            user = await client(GetFullUserRequest(i))
+            first_name = user.users[0].first_name if user.users[0].first_name else ""
+            last_name = user.users[0].last_name if user.users[0].last_name else ""
+            full_name = f"{first_name} {last_name}".strip()
+            username = user.users[0].username if user.users[0].username else "-"
+            phone = user.users[0].phone if user.users[0].phone else "-"
+            for id, j in enumerate(df['id']):
+                if i == j:
+                    new_dict['id'].append(i)
+                    new_dict['username'].append(username)
+                    new_dict['full name'].append(full_name)
+                    new_dict['phone'].append(phone)
+                    new_dict['message'].append(str(df['message'][id]))
+                    new_dict['date'].append(str(df['date'][id]))
+            print(i)
+        pd.DataFrame(new_dict).to_excel('new_data.xlsx', index=False)
+
+    elif entry == 25: #edit messages, use bot 2
+        async for message in client.iter_messages(MAX_CHANNEL, search='video: '):
+            message_lst = message.text.split('\n')
+            for id, line in enumerate(message_lst):
+                if 'video: ' in line:
+                    message_lst.pop(id)
+            await client.edit_message(MAX_CHANNEL, message.id, '\n'.join(message_lst))
+
+
+    elif entry == 23: #I don't know))
         #data = [i for i in cur.execute('select id, link, title, members, type, city, sub_region, region, description, bot, user, suggest, keyword, note, priority from channels where suggest != 1')]
         data = [i[0] for i in cur.execute('select link from channels ')]
         df2 = pd.read_excel(TG, sheet_name='channels')
@@ -109,27 +155,9 @@ async def main():
 #                            except errors.rpcerrorlist.UsernameInvalidError:
 #                                print(i, '==>', 'free')
 
-    elif entry == 21: #test
-        import io
-        import aiohttp
-        urls = ['https://i.oneme.ru/i?r=BTE2sh_eZW7g8kugOdIm2Notoq8KAy1D7q-ma4xn1EJTGbMsjwwjBjhEt6sUhyWRKKY', 'https://i.oneme.ru/i?r=BTE2sh_eZW7g8kugOdIm2Notoq8KAy1D7q-ma4xn1EJTGbMsjwwjBjhEt6sUhyWRKKY', 'https://i.oneme.ru/i?r=BTE2sh_eZW7g8kugOdIm2Not5lRHdB_pnr08nY3F-ZWRE7MsjwwjBjhEt6sUhyWRKKY']
-        msg_ids = []
-        async with aiohttp.ClientSession() as session:
-            for id, url in enumerate(urls):
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.read()
-                        file = io.BytesIO(data)
-                        file.name = str(id)+'.png' 
-                        msg_ids.append(file)
-
-
-
-     #   async for message in client.iter_messages(-1003760925557):
-      #      msg_ids.append(message.id)
-
-       # await client.delete_messages(-1003760925557, msg_ids)
-        await client.send_file(-1003760925557, msg_ids, caption='files')
+    elif entry == 21: 
+        print('Under development!')
+    
     elif entry == 20:
         photo_path = str(df1['media_id'][n])
         first_name = str(df1['name'][n]).split(' ')[0]
@@ -150,7 +178,7 @@ async def main():
         await message.click(0)
 
     elif entry == 18:
-        con1 = sqlite3.connect(DS)
+        con1 = sqlite3.connect(TG_DEADS_DATA)
         cur1 = con1.cursor()        
         channels = [i[1][13:] for i in cur1.execute("select id, link from tg_ref")]
 
@@ -184,7 +212,6 @@ async def main():
                     topics.append(i)
 
                 else: break
-
         df['link'] = links
         df['views'] = views
         df['date'] = dates
@@ -599,7 +626,8 @@ async def main():
         file = open(f'tg_forwarder_links', 'a')
         file.write('\n'.join(lst)+'\n'), file.close()
 
-    elif entry == 3: pass
+    elif entry == 3:
+        print('Under development!')
         #await client.send_message('me', message)
         #await client(UpdateProfileRequest(about="test"))
 
