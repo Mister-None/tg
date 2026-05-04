@@ -8,9 +8,9 @@ from telethon import TelegramClient, functions, types, errors, utils
 from telethon.tl.functions.account import UpdateProfileRequest, UpdateUsernameRequest
 from telethon.tl.functions.channels import JoinChannelRequest, GetFullChannelRequest
 from telethon.tl.functions.messages import ExportChatInviteRequest
-from telethon.tl.functions.photos import UploadProfilePhotoRequest
+from telethon.tl.functions.photos import UploadProfilePhotoRequest, DeletePhotosRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.tl.types import Channel, Chat, User, DialogFilter, InputMessagesFilterPhotos, DocumentAttributeVideo, InputMessagesFilterVideo, InputMessagesFilterDocument
+from telethon.tl.types import Channel, Chat, User, DialogFilter, InputMessagesFilterPhotos, DocumentAttributeVideo, InputMessagesFilterVideo, InputMessagesFilterDocument, InputPhoto
 import sys, asyncio, pandas as pd, re, random as r, sqlite3, numpy as np, os, imagehash, warnings, requests
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -34,6 +34,7 @@ SECRET_CHANNEL = int(os.getenv('secret_channel'))
 TG_DEADS_DATA = os.getenv('tg_deads_data')
 con = sqlite3.connect(TG_DATA)
 cur = con.cursor()
+
 
 if len(sys.argv) < 3:
     lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'sophia', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog']
@@ -108,13 +109,10 @@ async def main():
         pd.DataFrame(new_dict).to_excel('new_data.xlsx', index=False)
 
     elif entry == 25: #edit messages, use bot 2
-        async for message in client.iter_messages(MAX_CHANNEL, search='video: '):
-            message_lst = message.text.split('\n')
-            for id, line in enumerate(message_lst):
-                if 'video: ' in line:
-                    message_lst.pop(id)
-            await client.edit_message(MAX_CHANNEL, message.id, '\n'.join(message_lst))
-
+        delete_date = input('Date for deletion yyyy-mm-dd >>> ').strip()
+        async for message in client.iter_messages(MAX_CHANNEL): 
+            if str(message.date).split(' ')[0] == delete_date:
+                await client.delete_messages(MAX_CHANNEL, message.id)
 
     elif entry == 23: #I don't know))
         #data = [i for i in cur.execute('select id, link, title, members, type, city, sub_region, region, description, bot, user, suggest, keyword, note, priority from channels where suggest != 1')]
@@ -159,19 +157,34 @@ async def main():
         print('Under development!')
     
     elif entry == 20:
-        photo_path = str(df1['media_id'][n])
-        first_name = str(df1['name'][n]).split(' ')[0]
-        last_name = str(df1['name'][n]).split(' ')[1]
-        await client(UpdateProfileRequest(first_name=first_name, last_name=last_name))
-        await asyncio.sleep(r.uniform(5, 10))
-        file = await client.upload_file(photo_path)
-        await client(UploadProfilePhotoRequest(file=file))
-        username = str(df1['username'][n]).strip()
-        print(username)
-        if username in ['nan', 'None']:
-            new_username = input('Username >>> ').strip()
-            await client(UpdateUsernameRequest(new_username))
+        if str(df1['media_id'][n]).strip() != 'nan':
+            photo_path = str(df1['media_id'][n])
+            if str(df1['text'][n]).strip() == 'delete':
+                photos = await client.get_profile_photos('me')
+                for i in photos:
+                    await client(DeletePhotosRequest(
+                        id=[InputPhoto(
+                            id=i.id,
+                            access_hash=i.access_hash,
+                            file_reference=i.file_reference
+                            )]))
 
+            file = await client.upload_file(photo_path)
+            await asyncio.sleep(r.uniform(5, 10))
+            await client(UploadProfilePhotoRequest(file=file))
+
+        if str(df1['text'][n]).strip() != 'delete':
+            first_name = str(df1['name'][n]).split(' ')[0]
+            last_name = str(df1['name'][n]).split(' ')[1]
+            await client(UpdateProfileRequest(first_name=first_name, last_name=last_name))
+        
+        if str(df1['username'][n]).strip() in ['nan', 'None']:
+            new_username = input('Username >>> ').strip()
+            try:
+                await client(UpdateUsernameRequest(new_username))
+            except errors.rpcerrorlist.UsernameOccupiedError:
+                new_username = input('Username occupied, try another one >>> ').strip()
+                await client(UpdateUsernameRequest(new_username))
 
     elif entry == 19:
         message = await client.get_messages(channel_username, ids=message_poll)
@@ -199,6 +212,7 @@ async def main():
         con1.close()
 
     elif entry == 17:
+        df = pd.DataFrame()
         channels = [i[1][13:] for i in cur.execute("select id, link from channels where note='monthly_report'")]
         for i in channels:
             async for message in client.iter_messages(i):
@@ -298,6 +312,7 @@ async def main():
         l1, l2, l3, l4, l5, l6, l7 = [], [], [], [], [], [], []
         next_id, last_id = int(df1['next_id'][n])-2, int(df1['last_id'][n])-2
         df2 = pd.read_excel(TG, sheet_name='channels')
+        df = pd.DataFrame()
 
         async def get_channel_info(username):
             chat = await client(functions.channels.GetFullChannelRequest(channel=username))
@@ -478,8 +493,17 @@ async def main():
         dialogs = await client.get_dialogs()
         for id, i in enumerate(dialogs):
             if i.entity.id not in our_channels:
-                await client.delete_dialog(dialogs[id])
-                print(id)
+                try:
+                    await client.delete_dialog(dialogs[id])
+                    print(id)
+                except tl_errors as e: 
+                    if 'A wait of' in str(e):
+                            wait_time = int(re.search(r'\d+').groups(0))
+                            print('wait for', wait_time, 'seconds...')
+                            await asyncio.sleep(wait_time)
+                            await client.delete_dialog(dialogs[id])
+                            print(id)
+                    else: print(id, e)
 
     elif entry == 2: #send to bot/user
         with open(RECIPIENTS, 'r') as f:
@@ -629,7 +653,7 @@ async def main():
     elif entry == 3:
         print('Under development!')
         #await client.send_message('me', message)
-        #await client(UpdateProfileRequest(about="test"))
+        #await client(UpdateProfileRequest(about=""))
 
     elif entry == 5: #Get activation code
         async for message in client.iter_messages(777000, 1): 

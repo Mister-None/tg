@@ -1,13 +1,15 @@
 import subprocess, sys, time, os
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
+
+base_dot_env = os.getenv('DOTENV_FILE_PATH')
+load_dotenv(dotenv_path=base_dot_env)
 
 TBOT = os.getenv('tbot')
+
 
 if len(sys.argv) < 3:
     print("Enter number of function and range of bots!!!")
     sys.exit(1)
-
 
 function = int(sys.argv[1])
 
@@ -24,5 +26,5 @@ next_bot_id, last_bot_id = int(bots_id[0]), int(bots_id[-1])
 
 for k in range(last_bot_id+1):
     if last_bot_id >= k >= next_bot_id:
-        subprocess.Popen(f'terminator --new-tab -e \'bash -c "source work/bin/activate; python {TBOT} {function} {k} {option}; exec bash"\'', shell=True)
+        subprocess.Popen(f'terminator --new-tab -e \'bash -c "export DOTENV_FILE_PATH={base_dot_env};  source work/bin/activate; python {TBOT} {function} {k} {option}; exec bash"\'', shell=True, env=os.environ)
         time.sleep(1)
