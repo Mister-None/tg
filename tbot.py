@@ -19,7 +19,7 @@ load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
 init(autoreset=True)
 
 APP_ID = os.getenv('app_id')
-APP_TOKEN = os.getenv('app_token')
+APP_HASH = os.getenv('app_hash')
 CHATS_GROUPS = os.getenv('chats_groups')
 FORWARD_LOG = os.getenv('forward_log')
 PASSWORD = os.getenv('password')
@@ -55,10 +55,10 @@ df1 = pd.read_excel(TG, sheet_name='credentials')
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-client = TelegramClient(f"{SESSIONS}/{re.sub(r'[.].+','', str(df1['phone'][n]))}", APP_ID, APP_TOKEN)
+client = TelegramClient(f"{SESSIONS}/{re.sub(r'[.].+','', str(df1['phone'][n]))}", APP_ID, APP_HASH)
 
 async def main():
-    tl_errors = (TypeError, ValueError, AttributeError, errors.rpcerrorlist.PeerFloodError, errors.rpcerrorlist.UsernameInvalidError, errors.rpcerrorlist.BotInvalidError, errors.rpcbaseerrors.ForbiddenError, errors.rpcerrorlist.InputUserDeactivatedError, errors.rpcerrorlist.InputUserDeactivatedError, errors.rpcerrorlist.ChannelPrivateError, errors.rpcerrorlist.InviteRequestSentError, errors.rpcbaseerrors.BadRequestError)
+    tl_errors = (TypeError, ValueError, AttributeError, errors.rpcerrorlist.PeerFloodError, errors.rpcerrorlist.UsernameInvalidError, errors.rpcerrorlist.BotInvalidError, errors.rpcbaseerrors.ForbiddenError, errors.rpcerrorlist.InputUserDeactivatedError, errors.rpcerrorlist.InputUserDeactivatedError, errors.rpcerrorlist.ChannelPrivateError, errors.rpcerrorlist.InviteRequestSentError, errors.rpcbaseerrors.BadRequestError, errors.rpcbaseerrors.AuthKeyError, errors.rpcerrorlist.PeerIdInvalidError)
 
     old_channels, files, lst, links, views, dates, topics = [], [], [], [], [], [], []
 
@@ -110,8 +110,10 @@ async def main():
 
     elif entry == 25: #edit messages, use bot 2
         delete_date = input('Date for deletion yyyy-mm-dd >>> ').strip()
-        async for message in client.iter_messages(MAX_CHANNEL): 
+        async for message in client.iter_messages(MAX_CHANNEL):
             if str(message.date).split(' ')[0] == delete_date:
+                try: message_title = message.text.split('\n')[0].strip()
+                except AttributeError: pass                 
                 await client.delete_messages(MAX_CHANNEL, message.id)
 
     elif entry == 23: #I don't know))
@@ -187,7 +189,8 @@ async def main():
                 await client(UpdateUsernameRequest(new_username))
 
     elif entry == 19:
-        message = await client.get_messages(channel_username, ids=message_poll)
+
+        message = await client.get_messages('dvizhenie_nashvyhod', ids=2713)
         await message.click(0)
 
     elif entry == 18:
@@ -354,7 +357,7 @@ async def main():
         df['type'] = l5
         df['description'] = l6
         df['keyword'] = l7
-        df.to_excel(f'{next_id+2}-{last_id+2}_tg_channels.xlsx')
+        df.to_excel(f'{next_id+2}-{last_id+2}_tg_channels.xlsx', index=False)
     
     elif entry == 24:
         df0 = open(SEARCH_CHANNELS, 'r').read().split('\n')
@@ -651,9 +654,13 @@ async def main():
         file.write('\n'.join(lst)+'\n'), file.close()
 
     elif entry == 3:
-        print('Under development!')
+        #print('Under development!')
         #await client.send_message('me', message)
-        #await client(UpdateProfileRequest(about=""))
+        bio = input('Bio >>> ')
+        if bio: 
+            await client(UpdateProfileRequest(about=bio))
+        else:
+            await client(UpdateProfileRequest(about=''))
 
     elif entry == 5: #Get activation code
         async for message in client.iter_messages(777000, 1): 
