@@ -37,7 +37,7 @@ cur = con.cursor()
 
 
 if len(sys.argv) < 3:
-    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'sophia', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog']
+    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'monthly_view_statistic', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog']
 
     print(Fore.RED + 'Enter number of function and number of bot!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
