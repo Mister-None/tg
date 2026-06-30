@@ -3,7 +3,7 @@ from moviepy import VideoFileClip
 from colorama import Fore, init
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-
+from telethon.sessions import StringSession
 from telethon import TelegramClient, functions, types, errors, utils
 from telethon.tl.functions.account import UpdateProfileRequest, UpdateUsernameRequest
 from telethon.tl.functions.channels import JoinChannelRequest, GetFullChannelRequest
@@ -11,9 +11,8 @@ from telethon.tl.functions.messages import ExportChatInviteRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest, DeletePhotosRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import Channel, Chat, User, DialogFilter, InputMessagesFilterPhotos, DocumentAttributeVideo, InputMessagesFilterVideo, InputMessagesFilterDocument, InputPhoto
-import sys, asyncio, pandas as pd, re, random as r, sqlite3, numpy as np, os, imagehash, warnings, requests
-
-warnings.filterwarnings("ignore", category=UserWarning)
+import sys, asyncio, pandas as pd, re, random as r, sqlite3, numpy as np, os, imagehash, warnings, requests, base64, struct, ipaddress
+#warnings.filterwarnings("ignore", category=UserWarning)
 
 load_dotenv(dotenv_path=os.getenv('DOTENV_FILE_PATH'))
 init(autoreset=True)
@@ -36,8 +35,60 @@ con = sqlite3.connect(TG_DATA)
 cur = con.cursor()
 
 
+if len(sys.argv) == 2 and sys.argv[1] == '27':
+    tg_servers = {
+    "dc1": "149.154.175.53",
+    "dc2": "149.154.167.51",
+    "dc3": "149.154.175.100",
+    "dc4": "149.154.167.91",
+    "dc5": "91.108.56.130"
+    }
+    def generate_string_session(dc_id, auth_key):
+        server_address = tg_servers[f"dc{dc_id}"]
+        port = 443
+        _STRUCT_PREFORMAT = '>B{}sH256s'
+        CURRENT_VERSION = '1'
+        auth_key_bytes = bytes.fromhex(auth_key)
+        ip_packed = ipaddress.ip_address(server_address).packed
+        session_data = struct.pack(
+            _STRUCT_PREFORMAT.format(len(ip_packed)),
+            dc_id,
+            ip_packed,
+            port,
+            auth_key_bytes
+        )
+        encoded_session = base64.urlsafe_b64encode(session_data).decode('ascii')
+        return CURRENT_VERSION + encoded_session
+    
+    async def main():
+        print("[-] Enter DC Id: ", end="")
+        dc_id = int(input().strip())
+        print("[-] Enter DC Auth Key: ", end="")
+        dc_auth_key = input().strip()
+        session_string = generate_string_session(dc_id, dc_auth_key)
+        temp_client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
+        await temp_client.connect()
+        me = await temp_client.get_me()
+        print(str(me.first_name), str(me.last_name) + '\t' + str(me.id) + '\t' + str(me.username) + '\t' + str(me.phone))
+        name = input('phone > ')
+        client = TelegramClient(name, api_id, api_hash)
+        await client.connect()
+        client.session.auth_key = temp_client.session.auth_key
+        client.session.set_dc(
+            temp_client.session.dc_id, 
+            temp_client.session.server_address, 
+            temp_client.session.port
+        )
+        client.session.save()    
+        new_client = TelegramClient(name, api_id, api_hash)
+        await new_client.connect()
+        me = await new_client.get_me()
+        print(me.first_name)
+
+    asyncio.run(main())
+    
 if len(sys.argv) < 3:
-    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'monthly_view_statistic', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog']
+    lst_functions = ['get dialogs id', 'leave chats and channels', 'send to bot user', 'change bio',  'forward post','get activation code', 'join chat', 'fresh channels','view posts', 'edit 2FA', 'create folder', 'join_channel', 'find image', 'find video', 'channel info', 'comment on post', 'statistic on posts', 'monthly_view_statistic', 'collect raw data', 'votet', 'change name & upload photo', 'delete messages from channel', 'check username', 'get recipients', 'find document', 'edit messages', 'get history of dialog', 'create session from web']
 
     print(Fore.RED + 'Enter number of function and number of bot!')
     [print(Fore.LIGHTYELLOW_EX + str(id), Fore.LIGHTGREEN_EX + '==>', Fore.LIGHTBLUE_EX +i) for id, i in enumerate(lst_functions) if i]
@@ -131,6 +182,16 @@ async def main():
         df.to_excel('tg_data.xlsx')
 
     elif entry == 22: #clean false bots
+        df = pd.read_excel(TG, sheet_name='error_bot')
+        usernames = list(set([str(i) for i in df['username']]))
+        usernames.sort()
+        for i in  usernames:
+            try:
+                await client(functions.contacts.ResolveUsernameRequest(i))
+            except (errors.UsernameNotOccupiedError, errors.rpcerrorlist.UsernameInvalidError):
+                print(f"{i}\tnot exist")
+
+        exit()
         with open('false') as f:
             for i in f.read().split('\n'):
                 if i:
@@ -161,7 +222,7 @@ async def main():
     elif entry == 20:
         if str(df1['media_id'][n]).strip() != 'nan':
             photo_path = str(df1['media_id'][n])
-            if str(df1['text'][n]).strip() == 'delete':
+            if str(df1['text'][n]).strip() in ['delete', 'delete change_name']:
                 photos = await client.get_profile_photos('me')
                 for i in photos:
                     await client(DeletePhotosRequest(
@@ -175,7 +236,7 @@ async def main():
             await asyncio.sleep(r.uniform(5, 10))
             await client(UploadProfilePhotoRequest(file=file))
 
-        if str(df1['text'][n]).strip() != 'delete':
+        if str(df1['text'][n]).strip() in ['change_name', 'delete change_name']:
             first_name = str(df1['name'][n]).split(' ')[0]
             last_name = str(df1['name'][n]).split(' ')[1]
             await client(UpdateProfileRequest(first_name=first_name, last_name=last_name))
@@ -330,7 +391,15 @@ async def main():
             l6.append(str(chat.full_chat.about))
             l7.append(str(df2['keyword'][id]))
             print(id+2)
-
+        
+#        df3 = pd.read_excel('Merged_Data.xlsx', sheet_name='Sheet1')
+#        for j in df3['link']:
+#            for id, k in enumerate(df2['link']):
+#                if j == k:
+#                    with open('geo', 'a') as f:
+#                        f.write(str(df2['city'][id])+'\t'+str(df2['sub_region'][id])+'\t'+str(df2['region'][id])+'\n')
+#                    break
+#        exit()
         for id, i in enumerate(df2['link']):
             if last_id >= id >= next_id:
                 if str(i) == 'nan': continue
@@ -553,8 +622,15 @@ async def main():
                     peer = await client.get_input_entity(j)
                     peer_id, access_hash = peer.user_id, peer.access_hash
                 except tl_errors as e:
-                    add_error_record(j + '\t' + str(e))
-                    continue 
+                    if 'A wait of' in str(e):
+                        wait_time = re.search(r' \d+ ', str(e)).group(0)
+                        print('Flood wait for ', f"{wait_time} seconds")
+                        await asyncio.sleep(int(str(wait_time).strip()))
+                        peer = await client.get_input_entity(j)
+                        peer_id, access_hash = peer.user_id, peer.access_hash
+                    else:
+                        add_error_record(j + '\t' + str(e))
+                        continue
                 try: await send_to_bot_user() 
                 except tl_errors as e:
                     try:
